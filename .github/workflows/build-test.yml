@@ -1,0 +1,22 @@
+on:
+  push:
+    branches:
+      - main
+
+env: 
+  RUST_LOG: solana_bpf_loader=debug
+
+jobs: 
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      -uses: actions/checkout@v3
+      -uses: actions-rs/toolchain@v1
+      -run: sh -c "$(curl -sSfL https://release.solana.com/v1.9.9/install)" > solana-install.log
+      -run: cargo build-bpf > build.log
+      -run: cargo test-bpf -- --test-threads=3 > test.log
+      -uses: actions/upload-artifact@v3
+      if: failure()
+      with: 
+        name: log-files
+        path: *.log
