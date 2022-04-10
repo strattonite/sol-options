@@ -12,6 +12,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
       - run: mkdir logs
       - run: sh -c "$(curl -sSfL https://release.solana.com/v1.9.9/install)" > logs/solana-install.log
       - run: cargo build-bpf > logs/build.log
