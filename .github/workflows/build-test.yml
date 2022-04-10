@@ -17,7 +17,8 @@ jobs:
       - run: echo $HOME
       - run: mkdir logs
       - run: sh -c "$(curl -sSfL https://release.solana.com/v1.9.9/install)" > logs/solana-install.log
-      - run: eval "$(egrep 'export.{1,}\"$' logs/solana-install.log)"
+      - run: echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+      - run: echo "$PATH"
       - run: solana --version
       - run: rustc --version
       - run: cargo build-bpf > logs/build.log
