@@ -16,6 +16,7 @@ jobs:
           toolchain: stable
       - run: mkdir logs
       - run: sh -c "$(curl -sSfL https://release.solana.com/v1.9.9/install)" > logs/solana-install.log
+      - run: export PATH="/home/runner/.local/share/solana/install/active_release/bin:$PATH"
       - run: cargo build-bpf > logs/build.log
       - run: cargo test-bpf -- --test-threads=3 > logs/test.log
       - uses: actions/upload-artifact@v3
