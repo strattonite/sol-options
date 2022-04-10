@@ -14,9 +14,12 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+      - run: echo $HOME
       - run: mkdir logs
       - run: sh -c "$(curl -sSfL https://release.solana.com/v1.9.9/install)" > logs/solana-install.log
-      - run: export PATH="/home/runner/.local/share/solana/install/active_release/bin:$PATH"
+      - run: eval "$(egrep 'export.{1,}\"$' logs/solana-install.log)"
+      - run: solana --version
+      - run: rustc --version
       - run: cargo build-bpf > logs/build.log
       - run: cargo test-bpf -- --test-threads=3 > logs/test.log
       - uses: actions/upload-artifact@v3
