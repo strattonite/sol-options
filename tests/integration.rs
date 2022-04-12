@@ -3,9 +3,8 @@
 use call_opt::{
     entrypoint::process_instruction,
     instruction::InitParty,
-    state::{ContractData, ContractPDA, ContractState, ContractType, PartyData},
+    state::{get_seed, ContractData, ContractPDA, ContractState, ContractType, PartyData},
 };
-use sha2::{Digest, Sha256};
 use solana_program_test::*;
 use solana_sdk::{
     instruction::{AccountMeta, Instruction},
@@ -18,7 +17,7 @@ use solana_sdk::{
 };
 use spl_associated_token_account::{create_associated_token_account, get_associated_token_address};
 use spl_token;
-use std::{convert::TryInto, time::SystemTime};
+use std::time::SystemTime;
 
 const MINT_SIZE: u64 = 82;
 
@@ -37,6 +36,7 @@ struct TestEnv {
     mint_2: keypair::Keypair,
     buyer_temp: Pubkey,
     writer_temp: Pubkey,
+    index_seed: [u8; 41],
 }
 
 enum InitMode {
@@ -47,8 +47,8 @@ enum InitMode {
 #[tokio::test]
 async fn call_bid_execute() {
     let contract_type = ContractType::CALL;
-    let mut test_env = init_env(contract_type).await;
     let init_mode = InitMode::BUYER;
+    let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 10000;
     let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
     let contract_pda = accept_bid(&mut test_env, contract_pda).await;
@@ -58,8 +58,8 @@ async fn call_bid_execute() {
 #[tokio::test]
 async fn call_ask_execute() {
     let contract_type = ContractType::CALL;
-    let mut test_env = init_env(contract_type).await;
     let init_mode = InitMode::WRITER;
+    let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 10000;
     let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
     let contract_pda = accept_ask(&mut test_env, contract_pda).await;
@@ -69,8 +69,8 @@ async fn call_ask_execute() {
 #[tokio::test]
 async fn call_bid_cancel() {
     let contract_type = ContractType::CALL;
-    let mut test_env = init_env(contract_type).await;
     let init_mode = InitMode::BUYER;
+    let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 10000;
     let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
     cancel_offer(&mut test_env, contract_pda, &init_mode).await;
@@ -79,8 +79,8 @@ async fn call_bid_cancel() {
 #[tokio::test]
 async fn call_ask_cancel() {
     let contract_type = ContractType::CALL;
-    let mut test_env = init_env(contract_type).await;
     let init_mode = InitMode::WRITER;
+    let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 10000;
     let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
     cancel_offer(&mut test_env, contract_pda, &init_mode).await;
@@ -89,8 +89,8 @@ async fn call_ask_cancel() {
 #[tokio::test]
 async fn call_bid_expire() {
     let contract_type = ContractType::CALL;
-    let mut test_env = init_env(contract_type).await;
     let init_mode = InitMode::BUYER;
+    let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 1000;
     let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
     let contract_pda = accept_bid(&mut test_env, contract_pda).await;
@@ -101,8 +101,8 @@ async fn call_bid_expire() {
 #[tokio::test]
 async fn call_ask_expire() {
     let contract_type = ContractType::CALL;
-    let mut test_env = init_env(contract_type).await;
     let init_mode = InitMode::WRITER;
+    let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 1000;
     let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
     let contract_pda = accept_ask(&mut test_env, contract_pda).await;
@@ -113,8 +113,8 @@ async fn call_ask_expire() {
 #[tokio::test]
 async fn put_bid_execute() {
     let contract_type = ContractType::PUT;
-    let mut test_env = init_env(contract_type).await;
     let init_mode = InitMode::BUYER;
+    let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 10000;
     let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
     let contract_pda = accept_bid(&mut test_env, contract_pda).await;
@@ -124,8 +124,8 @@ async fn put_bid_execute() {
 #[tokio::test]
 async fn put_ask_execute() {
     let contract_type = ContractType::PUT;
-    let mut test_env = init_env(contract_type).await;
     let init_mode = InitMode::WRITER;
+    let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 10000;
     let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
     let contract_pda = accept_ask(&mut test_env, contract_pda).await;
@@ -135,8 +135,8 @@ async fn put_ask_execute() {
 #[tokio::test]
 async fn put_bid_cancel() {
     let contract_type = ContractType::PUT;
-    let mut test_env = init_env(contract_type).await;
     let init_mode = InitMode::BUYER;
+    let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 10000;
     let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
     cancel_offer(&mut test_env, contract_pda, &init_mode).await;
@@ -145,8 +145,8 @@ async fn put_bid_cancel() {
 #[tokio::test]
 async fn put_ask_cancel() {
     let contract_type = ContractType::PUT;
-    let mut test_env = init_env(contract_type).await;
     let init_mode = InitMode::WRITER;
+    let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 10000;
     let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
     cancel_offer(&mut test_env, contract_pda, &init_mode).await;
@@ -155,8 +155,8 @@ async fn put_ask_cancel() {
 #[tokio::test]
 async fn put_bid_expire() {
     let contract_type = ContractType::PUT;
-    let mut test_env = init_env(contract_type).await;
     let init_mode = InitMode::BUYER;
+    let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 1000;
     let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
     let contract_pda = accept_bid(&mut test_env, contract_pda).await;
@@ -167,8 +167,8 @@ async fn put_bid_expire() {
 #[tokio::test]
 async fn put_ask_expire() {
     let contract_type = ContractType::PUT;
-    let mut test_env = init_env(contract_type).await;
     let init_mode = InitMode::WRITER;
+    let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 1000;
     let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
     let contract_pda = accept_ask(&mut test_env, contract_pda).await;
@@ -176,7 +176,7 @@ async fn put_ask_expire() {
     expire_contract(&mut test_env, contract_pda).await;
 }
 
-async fn init_env(contract_type: ContractType) -> TestEnv {
+async fn init_env(contract_type: ContractType, init_mode: &InitMode) -> TestEnv {
     println!("\n-----CREATING-TEST-ENVIRONMENT-----\n");
     let program_key = keypair::Keypair::new();
     let buyer_key = keypair::Keypair::new();
@@ -404,6 +404,17 @@ async fn init_env(contract_type: ContractType) -> TestEnv {
         mint_2: w2,
     };
 
+    let mut index_seed = [0; 41];
+
+    match init_mode {
+        InitMode::BUYER => index_seed[..32].copy_from_slice(&buyer.main.pubkey().to_bytes()),
+        InitMode::WRITER => index_seed[..32].copy_from_slice(&writer.main.pubkey().to_bytes()),
+    };
+    index_seed[32] = match contract_type {
+        ContractType::CALL => 0,
+        ContractType::PUT => 1,
+    };
+
     println!("\n\n-----TEST-ENVIRONMENT-SETUP-COMPLETE-----\n\n");
 
     TestEnv {
@@ -415,6 +426,7 @@ async fn init_env(contract_type: ContractType) -> TestEnv {
         mint_2,
         buyer_temp: buyer_temp.pubkey(),
         writer_temp: writer_temp.pubkey(),
+        index_seed,
     }
 }
 
@@ -473,24 +485,23 @@ async fn init_contract(
         }),
     };
 
-    let mut instruction_data = Vec::with_capacity(130);
-
-    match init_mode {
-        InitMode::BUYER => instruction_data.extend_from_slice(&[0]),
-        InitMode::WRITER => instruction_data.extend_from_slice(&[1]),
+    let mut instruction_data = [0; 171];
+    instruction_data[0] = match init_mode {
+        InitMode::BUYER => 0,
+        InitMode::WRITER => 1,
     };
-    match contract_type {
-        ContractType::CALL => instruction_data.extend_from_slice(&[0]),
-        ContractType::PUT => instruction_data.extend_from_slice(&[1]),
-    }
-    instruction_data.extend_from_slice(&contract_data.serialize());
-    let instruction_data: [u8; 130] = instruction_data.try_into().unwrap();
+    instruction_data[1] = match contract_type {
+        ContractType::CALL => 0,
+        ContractType::PUT => 1,
+    };
+    let cd = contract_data.serialize();
+    instruction_data[2..ContractData::LEN + 2].copy_from_slice(&cd);
+    instruction_data[ContractData::LEN + 2..].copy_from_slice(&test_env.index_seed);
+    let seed = get_seed(&cd);
+    let index_seed = get_seed(&test_env.index_seed);
 
-    let mut hasher = Sha256::new();
-    hasher.update(&instruction_data[2..130]);
-    let seed: [u8; 32] = hasher.finalize().try_into().unwrap();
-
-    let (pda, bump) = Pubkey::find_program_address(&[&seed], &test_env.program_key.pubkey());
+    let (pda, bump) =
+        Pubkey::find_program_address(&[&seed, &index_seed], &test_env.program_key.pubkey());
 
     let accounts = match init_mode {
         InitMode::BUYER => {
@@ -620,6 +631,7 @@ async fn init_contract(
         bump,
         init_party,
         contract_type: *contract_type,
+        index_seed: get_seed(&test_env.index_seed),
     };
 
     assert_eq!(expected_data, pda_data, "incorrect PDA data");
@@ -663,8 +675,10 @@ async fn init_contract(
 }
 
 async fn accept_bid(test_env: &mut TestEnv, contract_pda: ContractPDA) -> ContractPDA {
-    let (pda, _bump) =
-        Pubkey::find_program_address(&[&contract_pda.seed], &test_env.program_key.pubkey());
+    let (pda, _bump) = Pubkey::find_program_address(
+        &[&contract_pda.seed, &contract_pda.index_seed],
+        &test_env.program_key.pubkey(),
+    );
 
     let prem_init = test_env
         .ctx
@@ -816,8 +830,10 @@ async fn accept_bid(test_env: &mut TestEnv, contract_pda: ContractPDA) -> Contra
 }
 
 async fn accept_ask(test_env: &mut TestEnv, contract_pda: ContractPDA) -> ContractPDA {
-    let (pda, _bump) =
-        Pubkey::find_program_address(&[&contract_pda.seed], &test_env.program_key.pubkey());
+    let (pda, _bump) = Pubkey::find_program_address(
+        &[&contract_pda.seed, &contract_pda.index_seed],
+        &test_env.program_key.pubkey(),
+    );
 
     let prem_init = test_env
         .ctx
@@ -958,8 +974,10 @@ async fn accept_ask(test_env: &mut TestEnv, contract_pda: ContractPDA) -> Contra
 }
 
 async fn execute(test_env: &mut TestEnv, contract_pda: ContractPDA, contract_type: &ContractType) {
-    let (pda, _bump) =
-        Pubkey::find_program_address(&[&contract_pda.seed], &test_env.program_key.pubkey());
+    let (pda, _bump) = Pubkey::find_program_address(
+        &[&contract_pda.seed, &contract_pda.index_seed],
+        &test_env.program_key.pubkey(),
+    );
 
     let (strike_rec_pub, asset_rec_pub) = match contract_type {
         ContractType::CALL => (test_env.writer.mint_2, test_env.buyer.mint_1),
@@ -1097,8 +1115,10 @@ async fn execute(test_env: &mut TestEnv, contract_pda: ContractPDA, contract_typ
 }
 
 async fn cancel_offer(test_env: &mut TestEnv, contract_pda: ContractPDA, init_mode: &InitMode) {
-    let (pda, _bump) =
-        Pubkey::find_program_address(&[&contract_pda.seed], &test_env.program_key.pubkey());
+    let (pda, _bump) = Pubkey::find_program_address(
+        &[&contract_pda.seed, &contract_pda.index_seed],
+        &test_env.program_key.pubkey(),
+    );
 
     let (initialiser, token_temp, token_ata) = match init_mode {
         InitMode::BUYER => (
@@ -1213,8 +1233,10 @@ async fn cancel_offer(test_env: &mut TestEnv, contract_pda: ContractPDA, init_mo
 }
 
 async fn expire_contract(test_env: &mut TestEnv, contract_pda: ContractPDA) {
-    let (pda, _bump) =
-        Pubkey::find_program_address(&[&contract_pda.seed], &test_env.program_key.pubkey());
+    let (pda, _bump) = Pubkey::find_program_address(
+        &[&contract_pda.seed, &contract_pda.index_seed],
+        &test_env.program_key.pubkey(),
+    );
 
     let accounts = vec![
         AccountMeta {

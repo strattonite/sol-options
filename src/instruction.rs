@@ -1,5 +1,4 @@
-use crate::state::{ContractData, ContractType};
-use sha2::{Digest, Sha256};
+use crate::state::{get_seed, ContractData, ContractType};
 use solana_program::{program_error::ProgramError, pubkey::Pubkey};
 use std::convert::TryInto;
 
@@ -97,6 +96,7 @@ pub struct OfferData {
     pub seed: [u8; 32],
     pub party: InitParty,
     pub contract_type: ContractType,
+    pub index_seed: [u8; 32],
 }
 
 pub fn decode_instruction(
@@ -115,16 +115,14 @@ pub fn decode_instruction(
     }
 }
 
-// instruction data: [instruction_type, contract_type, ..contract_data]
+// instruction data: [instruction_type, contract_type, ..contract_data, ..index_seed]
+// index_seed format: [0..32 = initialiser main pubkey, 32 = contract_type, 33..41 = contract_no (u64)]
 
 fn build_offer_data(
     pid: &Pubkey,
     party: InitParty,
     instruction_data: &[u8],
 ) -> Result<InstructionType, ProgramError> {
-    if instruction_data.len() != ContractData::LEN + 2 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
     let contract_type = match instruction_data[1] {
         0 => ContractType::CALL,
         1 => ContractType::PUT,
@@ -133,18 +131,23 @@ fn build_offer_data(
     let seed: [u8; ContractData::LEN] = instruction_data[2..ContractData::LEN + 2]
         .try_into()
         .unwrap();
+
+    let index_seed: [u8; 41] = instruction_data[ContractData::LEN + 2..]
+        .try_into()
+        .unwrap();
     let contract_data = ContractData::deserialize(&seed);
 
-    let mut hasher = Sha256::new();
-    hasher.update(&seed);
-    let seed: [u8; 32] = hasher.finalize().try_into().unwrap();
-    let (pda, bump) = Pubkey::find_program_address(&[&seed], pid);
+    let seed = get_seed(&seed);
+    let index_seed = get_seed(&index_seed);
+
+    let (pda, bump) = Pubkey::find_program_address(&[&seed, &index_seed], pid);
 
     let od = OfferData {
         contract_data,
         pda,
         bump,
         seed,
+        index_seed,
         party,
         contract_type,
     };

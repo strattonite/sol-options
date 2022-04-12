@@ -16,6 +16,7 @@ pub struct ContractPDA {
     pub writer_data: Option<PartyData>,
     pub is_initialised: bool,
     pub seed: [u8; 32],
+    pub index_seed: [u8; 32],
     pub bump: u8,
     pub init_party: InitParty,
     pub contract_type: ContractType,
@@ -30,7 +31,7 @@ impl IsInitialized for ContractPDA {
 }
 
 impl Pack for ContractPDA {
-    const LEN: usize = 389;
+    const LEN: usize = 421;
 
     fn unpack_from_slice(src: &[u8]) -> Result<Self, ProgramError> {
         if src.len() != ContractPDA::LEN {
@@ -46,7 +47,8 @@ impl Pack for ContractPDA {
             bump,
             init_party,
             contract_type,
-        ) = array_refs![src, 1, 128, 1, 128, 128, 1, 1, 1];
+            index_seed,
+        ) = array_refs![src, 1, 128, 1, 128, 128, 1, 1, 1, 32];
         let bump = bump[0];
 
         let is_initialised = match is_initialised[0] {
@@ -88,7 +90,7 @@ impl Pack for ContractPDA {
 
         let contract_data = ContractData::deserialize(seed);
 
-        let seed = get_seed(*seed);
+        let seed = get_seed(seed);
 
         Ok(ContractPDA {
             is_initialised,
@@ -100,6 +102,7 @@ impl Pack for ContractPDA {
             bump,
             init_party,
             contract_type,
+            index_seed: *index_seed,
         })
     }
 
@@ -114,7 +117,8 @@ impl Pack for ContractPDA {
             bump,
             init_party,
             contract_type,
-        ) = mut_array_refs![dst, 1, 128, 1, 128, 128, 1, 1, 1];
+            index_seed,
+        ) = mut_array_refs![dst, 1, 128, 1, 128, 128, 1, 1, 1, 32];
 
         is_initialised[0] = match self.is_initialised {
             true => 1,
@@ -139,6 +143,7 @@ impl Pack for ContractPDA {
 
         contract_data.copy_from_slice(&self.contract_data.serialize());
         bump.copy_from_slice(&[self.bump]);
+        index_seed.copy_from_slice(&self.index_seed);
 
         match &self.buyer_data {
             Some(bd) => {
@@ -156,9 +161,9 @@ impl Pack for ContractPDA {
     }
 }
 
-pub fn get_seed(bytes: [u8; 128]) -> [u8; 32] {
+pub fn get_seed(bytes: &[u8]) -> [u8; 32] {
     let mut hasher = Sha256::new();
-    hasher.update(&bytes);
+    hasher.update(bytes);
     let seed: [u8; 32] = hasher.finalize().try_into().unwrap();
     seed
 }

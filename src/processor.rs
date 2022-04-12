@@ -25,6 +25,7 @@ pub fn initialise_contract(
         seed,
         party,
         contract_type,
+        index_seed,
     } = instruction;
 
     let min_rent = rent::Rent::get()?.minimum_balance(ContractPDA::LEN);
@@ -125,6 +126,7 @@ pub fn initialise_contract(
             seed,
             init_party: instruction::InitParty::BUYER,
             contract_type,
+            index_seed,
         },
         instruction::InitParty::WRITER => ContractPDA {
             contract_data,
@@ -141,6 +143,7 @@ pub fn initialise_contract(
             seed,
             init_party: instruction::InitParty::WRITER,
             contract_type,
+            index_seed,
         },
     };
 
@@ -156,7 +159,7 @@ pub fn initialise_contract(
     invoke_signed(
         &create_pda,
         &[initialiser.clone(), data_pda.clone(), sys_program.clone()],
-        &[&[&seed, &[bump]]],
+        &[&[&seed, &index_seed, &[bump]]],
     )?;
 
     msg!("transferring temp ownership to PDA...");
@@ -305,7 +308,11 @@ pub fn accept_bid(accounts: &[AccountInfo]) -> Result<(), ProgramError> {
             data_pda.clone(),
             token_program.clone(),
         ],
-        &[&[&contract_pda.seed, &[contract_pda.bump]]],
+        &[&[
+            &contract_pda.seed,
+            &contract_pda.index_seed,
+            &[contract_pda.bump],
+        ]],
     )?;
 
     msg!("closing premium temp account...");
@@ -325,7 +332,11 @@ pub fn accept_bid(accounts: &[AccountInfo]) -> Result<(), ProgramError> {
             data_pda.clone(),
             token_program.clone(),
         ],
-        &[&[&contract_pda.seed, &[contract_pda.bump]]],
+        &[&[
+            &contract_pda.seed,
+            &contract_pda.index_seed,
+            &[contract_pda.bump],
+        ]],
     )?;
 
     msg!("updating PDA data...");
@@ -557,7 +568,11 @@ pub fn execute_contract(accounts: &[AccountInfo]) -> Result<(), ProgramError> {
             data_pda.clone(),
             token_program.clone(),
         ],
-        &[&[&contract_pda.seed, &[contract_pda.bump]]],
+        &[&[
+            &contract_pda.seed,
+            &contract_pda.index_seed,
+            &[contract_pda.bump],
+        ]],
     )?;
 
     msg!(
@@ -580,7 +595,11 @@ pub fn execute_contract(accounts: &[AccountInfo]) -> Result<(), ProgramError> {
             data_pda.clone(),
             token_program.clone(),
         ],
-        &[&[&contract_pda.seed, &[contract_pda.bump]]],
+        &[&[
+            &contract_pda.seed,
+            &contract_pda.index_seed,
+            &[contract_pda.bump],
+        ]],
     )?;
 
     let send_to = match contract_pda.init_party {
@@ -667,7 +686,11 @@ pub fn expire_contract(accounts: &[AccountInfo]) -> Result<(), ProgramError> {
             data_pda.clone(),
             token_program.clone(),
         ],
-        &[&[&contract_pda.seed, &[contract_pda.bump]]],
+        &[&[
+            &contract_pda.seed,
+            &contract_pda.index_seed,
+            &[contract_pda.bump],
+        ]],
     )?;
 
     let send_to = match contract_pda.init_party {
@@ -739,7 +762,11 @@ pub fn cancel_offer(accounts: &[AccountInfo]) -> Result<(), ProgramError> {
             data_pda.clone(),
             token_program.clone(),
         ],
-        &[&[&contract_pda.seed, &[contract_pda.bump]]],
+        &[&[
+            &contract_pda.seed,
+            &contract_pda.index_seed,
+            &[contract_pda.bump],
+        ]],
     )?;
 
     msg!("zeroing PDA account data...");
