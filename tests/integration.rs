@@ -12,7 +12,7 @@ use solana_sdk::{
     pubkey::Pubkey,
     rent::Rent,
     signer::{keypair, Signer},
-    system_instruction, system_program,
+    system_instruction, system_program, sysvar,
     transaction::Transaction,
 };
 use spl_associated_token_account::{create_associated_token_account, get_associated_token_address};
@@ -34,8 +34,10 @@ struct TestEnv {
     writer: PartyKeys,
     mint_1: keypair::Keypair,
     mint_2: keypair::Keypair,
+    holder_mint: keypair::Keypair,
     buyer_temp: Pubkey,
     writer_temp: Pubkey,
+    buyer_holder: Pubkey,
     index_seed: [u8; 41],
 }
 
@@ -50,9 +52,10 @@ async fn call_bid_execute() {
     let init_mode = InitMode::BUYER;
     let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 10000;
-    let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
-    let contract_pda = accept_bid(&mut test_env, contract_pda).await;
-    execute(&mut test_env, contract_pda, &contract_type).await;
+    let (contract_pda, mint_pda) =
+        init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
+    let contract_pda = accept_bid(&mut test_env, contract_pda, mint_pda).await;
+    execute(&mut test_env, contract_pda, mint_pda, &contract_type).await;
 }
 
 #[tokio::test]
@@ -61,9 +64,10 @@ async fn call_ask_execute() {
     let init_mode = InitMode::WRITER;
     let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 10000;
-    let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
-    let contract_pda = accept_ask(&mut test_env, contract_pda).await;
-    execute(&mut test_env, contract_pda, &contract_type).await;
+    let (contract_pda, mint_pda) =
+        init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
+    let contract_pda = accept_ask(&mut test_env, contract_pda, mint_pda).await;
+    execute(&mut test_env, contract_pda, mint_pda, &contract_type).await;
 }
 
 #[tokio::test]
@@ -72,7 +76,8 @@ async fn call_bid_cancel() {
     let init_mode = InitMode::BUYER;
     let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 10000;
-    let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
+    let (contract_pda, _mint_pda) =
+        init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
     cancel_offer(&mut test_env, contract_pda, &init_mode).await;
 }
 
@@ -82,7 +87,8 @@ async fn call_ask_cancel() {
     let init_mode = InitMode::WRITER;
     let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 10000;
-    let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
+    let (contract_pda, _mint_pda) =
+        init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
     cancel_offer(&mut test_env, contract_pda, &init_mode).await;
 }
 
@@ -92,8 +98,9 @@ async fn call_bid_expire() {
     let init_mode = InitMode::BUYER;
     let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 1000;
-    let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
-    let contract_pda = accept_bid(&mut test_env, contract_pda).await;
+    let (contract_pda, mint_pda) =
+        init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
+    let contract_pda = accept_bid(&mut test_env, contract_pda, mint_pda).await;
     test_env.ctx.warp_to_slot(10).unwrap();
     expire_contract(&mut test_env, contract_pda).await;
 }
@@ -104,8 +111,9 @@ async fn call_ask_expire() {
     let init_mode = InitMode::WRITER;
     let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 1000;
-    let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
-    let contract_pda = accept_ask(&mut test_env, contract_pda).await;
+    let (contract_pda, mint_pda) =
+        init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
+    let contract_pda = accept_ask(&mut test_env, contract_pda, mint_pda).await;
     test_env.ctx.warp_to_slot(10).unwrap();
     expire_contract(&mut test_env, contract_pda).await;
 }
@@ -116,9 +124,10 @@ async fn put_bid_execute() {
     let init_mode = InitMode::BUYER;
     let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 10000;
-    let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
-    let contract_pda = accept_bid(&mut test_env, contract_pda).await;
-    execute(&mut test_env, contract_pda, &contract_type).await;
+    let (contract_pda, mint_pda) =
+        init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
+    let contract_pda = accept_bid(&mut test_env, contract_pda, mint_pda).await;
+    execute(&mut test_env, contract_pda, mint_pda, &contract_type).await;
 }
 
 #[tokio::test]
@@ -127,9 +136,10 @@ async fn put_ask_execute() {
     let init_mode = InitMode::WRITER;
     let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 10000;
-    let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
-    let contract_pda = accept_ask(&mut test_env, contract_pda).await;
-    execute(&mut test_env, contract_pda, &contract_type).await;
+    let (contract_pda, mint_pda) =
+        init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
+    let contract_pda = accept_ask(&mut test_env, contract_pda, mint_pda).await;
+    execute(&mut test_env, contract_pda, mint_pda, &contract_type).await;
 }
 
 #[tokio::test]
@@ -138,7 +148,8 @@ async fn put_bid_cancel() {
     let init_mode = InitMode::BUYER;
     let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 10000;
-    let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
+    let (contract_pda, _mint_pda) =
+        init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
     cancel_offer(&mut test_env, contract_pda, &init_mode).await;
 }
 
@@ -148,7 +159,8 @@ async fn put_ask_cancel() {
     let init_mode = InitMode::WRITER;
     let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 10000;
-    let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
+    let (contract_pda, _mint_pda) =
+        init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
     cancel_offer(&mut test_env, contract_pda, &init_mode).await;
 }
 
@@ -158,8 +170,9 @@ async fn put_bid_expire() {
     let init_mode = InitMode::BUYER;
     let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 1000;
-    let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
-    let contract_pda = accept_bid(&mut test_env, contract_pda).await;
+    let (contract_pda, mint_pda) =
+        init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
+    let contract_pda = accept_bid(&mut test_env, contract_pda, mint_pda).await;
     test_env.ctx.warp_to_slot(10).unwrap();
     expire_contract(&mut test_env, contract_pda).await;
 }
@@ -170,8 +183,9 @@ async fn put_ask_expire() {
     let init_mode = InitMode::WRITER;
     let mut test_env = init_env(contract_type, &init_mode).await;
     let expire_time = 1000;
-    let contract_pda = init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
-    let contract_pda = accept_ask(&mut test_env, contract_pda).await;
+    let (contract_pda, mint_pda) =
+        init_contract(&mut test_env, &init_mode, &contract_type, expire_time).await;
+    let contract_pda = accept_ask(&mut test_env, contract_pda, mint_pda).await;
     test_env.ctx.warp_to_slot(10).unwrap();
     expire_contract(&mut test_env, contract_pda).await;
 }
@@ -185,6 +199,7 @@ async fn init_env(contract_type: ContractType, init_mode: &InitMode) -> TestEnv 
     let mint_2 = keypair::Keypair::new();
     let buyer_temp = keypair::Keypair::new();
     let writer_temp = keypair::Keypair::new();
+    let holder_mint = keypair::Keypair::new();
 
     println!("starting test-server");
 
@@ -237,21 +252,21 @@ async fn init_env(contract_type: ContractType, init_mode: &InitMode) -> TestEnv 
     .expect("could not create initialise_mint instruction");
 
     println!("creating mint 1...");
-    let tx =
-        Transaction::new_signed_with_payer(&[c1], Some(&payer.pubkey()), &[payer, &mint_1], block);
+    let tx = Transaction::new_signed_with_payer(
+        &[c1, i1],
+        Some(&payer.pubkey()),
+        &[payer, &mint_1],
+        block,
+    );
     client.process_transaction(tx).await.unwrap();
 
     println!("creating mint 2...");
-    let tx =
-        Transaction::new_signed_with_payer(&[c2], Some(&payer.pubkey()), &[payer, &mint_2], block);
-    client.process_transaction(tx).await.unwrap();
-
-    println!("initialising mint 1...");
-    let tx = Transaction::new_signed_with_payer(&[i1], Some(&payer.pubkey()), &[payer], block);
-    client.process_transaction(tx).await.unwrap();
-
-    println!("initialising mint 2...");
-    let tx = Transaction::new_signed_with_payer(&[i2], Some(&payer.pubkey()), &[payer], block);
+    let tx = Transaction::new_signed_with_payer(
+        &[c2, i2],
+        Some(&payer.pubkey()),
+        &[payer, &mint_2],
+        block,
+    );
     client.process_transaction(tx).await.unwrap();
 
     println!("transferring funds from payer to parties...");
@@ -290,6 +305,7 @@ async fn init_env(contract_type: ContractType, init_mode: &InitMode) -> TestEnv 
 
     let b1 = get_associated_token_address(&buyer_key.pubkey(), &mint_1.pubkey());
     let b2 = get_associated_token_address(&buyer_key.pubkey(), &mint_2.pubkey());
+    let b3 = get_associated_token_address(&buyer_key.pubkey(), &holder_mint.pubkey());
     let w1 = get_associated_token_address(&writer_key.pubkey(), &mint_1.pubkey());
     let w2 = get_associated_token_address(&writer_key.pubkey(), &mint_2.pubkey());
 
@@ -424,7 +440,9 @@ async fn init_env(contract_type: ContractType, init_mode: &InitMode) -> TestEnv 
         program_key,
         mint_1,
         mint_2,
+        holder_mint,
         buyer_temp: buyer_temp.pubkey(),
+        buyer_holder: b3,
         writer_temp: writer_temp.pubkey(),
         index_seed,
     }
@@ -435,23 +453,25 @@ async fn init_contract(
     init_mode: &InitMode,
     contract_type: &ContractType,
     expire_time: i64,
-) -> ContractPDA {
+) -> (ContractPDA, Pubkey) {
     let now = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_millis() as i64;
 
     println!("creating contract + instruction data");
-    let (token_type, strike_type, premium_type) = match contract_type {
+    let (token_type, strike_type, premium_type, s1) = match contract_type {
         ContractType::CALL => (
             test_env.mint_1.pubkey(),
             test_env.mint_2.pubkey(),
             test_env.mint_2.pubkey(),
+            [0],
         ),
         ContractType::PUT => (
             test_env.mint_2.pubkey(),
             test_env.mint_1.pubkey(),
             test_env.mint_2.pubkey(),
+            [1],
         ),
     };
 
@@ -465,12 +485,97 @@ async fn init_contract(
         expiry_date: now + expire_time,
     };
 
+    let mint_seed = get_seed(&contract_data.serialize());
+    println!("creating holder mint account");
+    let (mint_pda, _mint_bump) =
+        Pubkey::find_program_address(&[&s1, &mint_seed], &test_env.program_key.pubkey());
+
+    // let min_rent = Rent::default().minimum_balance(82);
+    // let ix1 = system_instruction::create_account(
+    //     &test_env.ctx.payer.pubkey(),
+    //     &test_env.holder_mint.pubkey(),
+    //     min_rent,
+    //     82,
+    //     &spl_token::id(),
+    // );
+
+    let accs = vec![
+        AccountMeta {
+            pubkey: test_env.ctx.payer.pubkey(),
+            is_signer: true,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: test_env.holder_mint.pubkey(),
+            is_signer: true,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: mint_pda,
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: system_program::id(),
+            is_signer: false,
+            is_writable: false,
+        },
+        AccountMeta {
+            pubkey: spl_token::id(),
+            is_signer: false,
+            is_writable: false,
+        },
+        AccountMeta {
+            pubkey: sysvar::rent::id(),
+            is_signer: false,
+            is_writable: false,
+        },
+    ];
+
+    let mut ixd = [0; 34];
+    ixd[0] = 7;
+    ixd[1] = s1[0];
+    ixd[2..].copy_from_slice(&mint_seed);
+
+    let ix = Instruction::new_with_bytes(test_env.program_key.pubkey(), &ixd, accs);
+    let tx = Transaction::new_signed_with_payer(
+        &[ix],
+        Some(&test_env.ctx.payer.pubkey()),
+        &[&test_env.ctx.payer, &test_env.holder_mint],
+        test_env.ctx.last_blockhash,
+    );
+    test_env
+        .ctx
+        .banks_client
+        .process_transaction(tx)
+        .await
+        .unwrap();
+
+    println!("creating holder_ata");
+    let ix = create_associated_token_account(
+        &test_env.ctx.payer.pubkey(),
+        &test_env.buyer.main.pubkey(),
+        &test_env.holder_mint.pubkey(),
+    );
+    let tx = Transaction::new_signed_with_payer(
+        &[ix],
+        Some(&test_env.ctx.payer.pubkey()),
+        &[&test_env.ctx.payer],
+        test_env.ctx.last_blockhash,
+    );
+    test_env
+        .ctx
+        .banks_client
+        .process_transaction(tx)
+        .await
+        .unwrap();
+
     let buyer_data = match init_mode {
         InitMode::BUYER => Some(PartyData {
             party_pub: test_env.buyer.main.pubkey(),
             temp_pub: test_env.buyer_temp.clone(),
             receive_pub: test_env.buyer.mint_1.clone(),
-            prem_receive_pub: None,
+            receive_ata: test_env.buyer_holder.clone(),
         }),
         InitMode::WRITER => None,
     };
@@ -481,7 +586,7 @@ async fn init_contract(
             party_pub: test_env.writer.main.pubkey(),
             temp_pub: test_env.writer_temp.clone(),
             receive_pub: test_env.writer.mint_2.clone(),
-            prem_receive_pub: Some(test_env.writer.mint_2.clone()),
+            receive_ata: test_env.writer.mint_2.clone(),
         }),
     };
 
@@ -503,81 +608,68 @@ async fn init_contract(
     let (pda, bump) =
         Pubkey::find_program_address(&[&seed, &index_seed], &test_env.program_key.pubkey());
 
-    let accounts = match init_mode {
-        InitMode::BUYER => {
-            vec![
-                AccountMeta {
-                    pubkey: test_env.buyer.main.pubkey(),
-                    is_signer: true,
-                    is_writable: true,
-                },
-                AccountMeta {
-                    pubkey: test_env.buyer_temp.clone(),
-                    is_signer: false,
-                    is_writable: true,
-                },
-                AccountMeta {
-                    pubkey: test_env.buyer.mint_1.clone(),
-                    is_signer: false,
-                    is_writable: true,
-                },
-                AccountMeta {
-                    pubkey: pda,
-                    is_signer: false,
-                    is_writable: true,
-                },
-                AccountMeta {
-                    pubkey: system_program::id(),
-                    is_signer: false,
-                    is_writable: false,
-                },
-                AccountMeta {
-                    pubkey: spl_token::id(),
-                    is_signer: false,
-                    is_writable: false,
-                },
-            ]
-        }
-        InitMode::WRITER => {
-            vec![
-                AccountMeta {
-                    pubkey: test_env.writer.main.pubkey(),
-                    is_signer: true,
-                    is_writable: true,
-                },
-                AccountMeta {
-                    pubkey: test_env.writer_temp.clone(),
-                    is_signer: false,
-                    is_writable: true,
-                },
-                AccountMeta {
-                    pubkey: test_env.writer.mint_2.clone(),
-                    is_signer: false,
-                    is_writable: true,
-                },
-                AccountMeta {
-                    pubkey: test_env.writer.mint_2.clone(),
-                    is_signer: false,
-                    is_writable: true,
-                },
-                AccountMeta {
-                    pubkey: pda,
-                    is_signer: false,
-                    is_writable: true,
-                },
-                AccountMeta {
-                    pubkey: system_program::id(),
-                    is_signer: false,
-                    is_writable: false,
-                },
-                AccountMeta {
-                    pubkey: spl_token::id(),
-                    is_signer: false,
-                    is_writable: false,
-                },
-            ]
-        }
+    let (initialiser, token_temp, receive_acc, receive_ata) = match init_mode {
+        InitMode::BUYER => (
+            test_env.buyer.main.pubkey(),
+            test_env.buyer_temp.clone(),
+            test_env.buyer.mint_1.clone(),
+            test_env.buyer_holder.clone(),
+        ),
+        InitMode::WRITER => (
+            test_env.writer.main.pubkey(),
+            test_env.writer_temp.clone(),
+            test_env.writer.mint_2.clone(),
+            test_env.writer.mint_2.clone(),
+        ),
     };
+
+    let accounts = vec![
+        AccountMeta {
+            pubkey: initialiser,
+            is_signer: true,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: token_temp,
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: receive_acc,
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: receive_ata,
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: mint_pda.clone(),
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: test_env.holder_mint.pubkey(),
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: pda,
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: system_program::id(),
+            is_signer: false,
+            is_writable: false,
+        },
+        AccountMeta {
+            pubkey: spl_token::id(),
+            is_signer: false,
+            is_writable: false,
+        },
+    ];
 
     println!("sending initialise contract instruction...");
     let instruction =
@@ -671,26 +763,20 @@ async fn init_contract(
         .await
         .expect_err("illegal transaction did not fail");
     println!("illegal transaction failed: {:?}", tx_result);
-    pda_data
+    (pda_data, mint_pda)
 }
 
-async fn accept_bid(test_env: &mut TestEnv, contract_pda: ContractPDA) -> ContractPDA {
+async fn accept_bid(
+    test_env: &mut TestEnv,
+    contract_pda: ContractPDA,
+    mint_pda: Pubkey,
+) -> ContractPDA {
     let (pda, _bump) = Pubkey::find_program_address(
         &[&contract_pda.seed, &contract_pda.index_seed],
         &test_env.program_key.pubkey(),
     );
 
-    let prem_init = test_env
-        .ctx
-        .banks_client
-        .get_account(test_env.writer.mint_2.clone())
-        .await
-        .unwrap()
-        .expect("could not find prem_receive account");
-
-    let prem_init_balance = spl_token::state::Account::unpack_from_slice(&prem_init.data[..])
-        .unwrap()
-        .amount;
+    let prem_init_balance = get_token_balance(test_env, test_env.writer.mint_2.clone()).await;
 
     println!("creating accept-bid instruction...");
 
@@ -727,6 +813,21 @@ async fn accept_bid(test_env: &mut TestEnv, contract_pda: ContractPDA) -> Contra
         },
         AccountMeta {
             pubkey: test_env.buyer.main.pubkey(),
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: test_env.buyer_holder.clone(),
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: mint_pda,
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: test_env.holder_mint.pubkey(),
             is_signer: false,
             is_writable: true,
         },
@@ -770,21 +871,11 @@ async fn accept_bid(test_env: &mut TestEnv, contract_pda: ContractPDA) -> Contra
 
     let pda_data = ContractPDA::unpack_from_slice(&pda_account.data[..]).unwrap();
 
-    let prem_receive = test_env
-        .ctx
-        .banks_client
-        .get_account(test_env.writer.mint_2.clone())
-        .await
-        .unwrap()
-        .expect("could not find premium temp account");
-
-    let rec_info = spl_token::state::Account::unpack_from_slice(&prem_receive.data[..]).unwrap();
-
     let writer_data = Some(PartyData {
         party_pub: test_env.writer.main.pubkey(),
         temp_pub: test_env.writer_temp.clone(),
         receive_pub: test_env.writer.mint_2.clone(),
-        prem_receive_pub: Some(test_env.writer.mint_2.clone()),
+        receive_ata: test_env.writer.mint_2.clone(),
     });
 
     let expected_data = ContractPDA {
@@ -795,10 +886,19 @@ async fn accept_bid(test_env: &mut TestEnv, contract_pda: ContractPDA) -> Contra
 
     assert_eq!(expected_data, pda_data, "incorrect PDA data");
 
-    let prem_paid = rec_info.amount - prem_init_balance;
+    let prem_balance = get_token_balance(test_env, test_env.writer.mint_2.clone()).await;
+
+    let prem_paid = prem_balance - prem_init_balance;
     assert_eq!(
         prem_paid, expected_data.contract_data.premium_qty,
         "incorrect writer premium balance"
+    );
+
+    let buyer_holder_balance = get_token_balance(test_env, test_env.buyer_holder.clone()).await;
+
+    assert_eq!(
+        buyer_holder_balance, 1,
+        "incorrect buyer holder token balance"
     );
 
     let ix = spl_token::instruction::transfer(
@@ -829,23 +929,17 @@ async fn accept_bid(test_env: &mut TestEnv, contract_pda: ContractPDA) -> Contra
     expected_data
 }
 
-async fn accept_ask(test_env: &mut TestEnv, contract_pda: ContractPDA) -> ContractPDA {
+async fn accept_ask(
+    test_env: &mut TestEnv,
+    contract_pda: ContractPDA,
+    mint_pda: Pubkey,
+) -> ContractPDA {
     let (pda, _bump) = Pubkey::find_program_address(
         &[&contract_pda.seed, &contract_pda.index_seed],
         &test_env.program_key.pubkey(),
     );
 
-    let prem_init = test_env
-        .ctx
-        .banks_client
-        .get_account(test_env.writer.mint_2.clone())
-        .await
-        .unwrap()
-        .expect("could not find prem_receive account");
-
-    let prem_init_balance = spl_token::state::Account::unpack_from_slice(&prem_init.data[..])
-        .unwrap()
-        .amount;
+    let prem_init_balance = get_token_balance(test_env, test_env.writer.mint_2.clone()).await;
 
     println!("creating accept-ask instruction");
 
@@ -862,6 +956,21 @@ async fn accept_ask(test_env: &mut TestEnv, contract_pda: ContractPDA) -> Contra
         },
         AccountMeta {
             pubkey: test_env.buyer.mint_1.clone(),
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: test_env.buyer_holder.clone(),
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: mint_pda,
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: test_env.holder_mint.pubkey(),
             is_signer: false,
             is_writable: true,
         },
@@ -909,7 +1018,7 @@ async fn accept_ask(test_env: &mut TestEnv, contract_pda: ContractPDA) -> Contra
         party_pub: test_env.buyer.main.pubkey(),
         temp_pub: test_env.buyer_temp.clone(),
         receive_pub: test_env.buyer.mint_1.clone(),
-        prem_receive_pub: None,
+        receive_ata: test_env.buyer_holder.clone(),
     });
 
     let expected_data = ContractPDA {
@@ -930,20 +1039,18 @@ async fn accept_ask(test_env: &mut TestEnv, contract_pda: ContractPDA) -> Contra
 
     assert_eq!(expected_data, pda_data, "incorrect PDA data");
 
-    let prem_receive = test_env
-        .ctx
-        .banks_client
-        .get_account(test_env.writer.mint_2.clone())
-        .await
-        .unwrap()
-        .expect("could not find premium temp account");
+    let prem_balance = get_token_balance(test_env, test_env.writer.mint_2.clone()).await;
 
-    let rec_info = spl_token::state::Account::unpack_from_slice(&prem_receive.data[..]).unwrap();
-
-    let prem_paid = rec_info.amount - prem_init_balance;
+    let prem_paid = prem_balance - prem_init_balance;
     assert_eq!(
         prem_paid, expected_data.contract_data.premium_qty,
         "incorrect writer premium balance"
+    );
+
+    let buyer_holder_balance = get_token_balance(test_env, test_env.buyer_holder.clone()).await;
+    assert_eq!(
+        buyer_holder_balance, 1,
+        "incorrect buyer holder token balance"
     );
 
     println!("trying illegal transaction...");
@@ -973,7 +1080,12 @@ async fn accept_ask(test_env: &mut TestEnv, contract_pda: ContractPDA) -> Contra
     expected_data
 }
 
-async fn execute(test_env: &mut TestEnv, contract_pda: ContractPDA, contract_type: &ContractType) {
+async fn execute(
+    test_env: &mut TestEnv,
+    contract_pda: ContractPDA,
+    mint_pda: Pubkey,
+    contract_type: &ContractType,
+) {
     let (pda, _bump) = Pubkey::find_program_address(
         &[&contract_pda.seed, &contract_pda.index_seed],
         &test_env.program_key.pubkey(),
@@ -983,27 +1095,8 @@ async fn execute(test_env: &mut TestEnv, contract_pda: ContractPDA, contract_typ
         ContractType::CALL => (test_env.writer.mint_2, test_env.buyer.mint_1),
         ContractType::PUT => (test_env.buyer.mint_1, test_env.writer.mint_2),
     };
-    let strike_init = test_env
-        .ctx
-        .banks_client
-        .get_account(strike_rec_pub.clone())
-        .await
-        .unwrap()
-        .unwrap();
-    let strike_init_balance = spl_token::state::Account::unpack_from_slice(&strike_init.data[..])
-        .unwrap()
-        .amount;
-    let asset_init = test_env
-        .ctx
-        .banks_client
-        .get_account(asset_rec_pub.clone())
-        .await
-        .unwrap()
-        .unwrap();
-
-    let asset_init_balance = spl_token::state::Account::unpack_from_slice(&asset_init.data[..])
-        .unwrap()
-        .amount;
+    let strike_init_balance = get_token_balance(test_env, strike_rec_pub.clone()).await;
+    let asset_init_balance = get_token_balance(test_env, asset_rec_pub.clone()).await;
 
     println!("creating execute transaction");
     let accounts = vec![
@@ -1019,6 +1112,21 @@ async fn execute(test_env: &mut TestEnv, contract_pda: ContractPDA, contract_typ
         },
         AccountMeta {
             pubkey: test_env.buyer.mint_1.clone(),
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: test_env.buyer_holder.clone(),
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: mint_pda,
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: test_env.holder_mint.pubkey(),
             is_signer: false,
             is_writable: true,
         },
@@ -1111,6 +1219,13 @@ async fn execute(test_env: &mut TestEnv, contract_pda: ContractPDA, contract_typ
     assert_eq!(
         strike_transferred, contract_pda.contract_data.strike_qty,
         "incorrect strike amount transferred"
+    );
+
+    let buyer_holder_balance = get_token_balance(test_env, test_env.buyer_holder.clone()).await;
+
+    assert_eq!(
+        buyer_holder_balance, 0,
+        "incorrect buyer holder token balance"
     );
 }
 
@@ -1230,6 +1345,13 @@ async fn cancel_offer(test_env: &mut TestEnv, contract_pda: ContractPDA, init_mo
         .process_transaction(tx)
         .await
         .unwrap();
+
+    let buyer_holder_balance = get_token_balance(test_env, test_env.buyer_holder.clone()).await;
+
+    assert_eq!(
+        buyer_holder_balance, 0,
+        "incorrect buyer holder token balance"
+    );
 }
 
 async fn expire_contract(test_env: &mut TestEnv, contract_pda: ContractPDA) {
@@ -1342,4 +1464,17 @@ async fn expire_contract(test_env: &mut TestEnv, contract_pda: ContractPDA) {
         .process_transaction(tx)
         .await
         .unwrap();
+}
+
+async fn get_token_balance(test_env: &mut TestEnv, pk: Pubkey) -> u64 {
+    let acc = test_env
+        .ctx
+        .banks_client
+        .get_account(pk)
+        .await
+        .unwrap()
+        .expect("could not find account");
+
+    let info = spl_token::state::Account::unpack_from_slice(&acc.data[..]).unwrap();
+    info.amount
 }

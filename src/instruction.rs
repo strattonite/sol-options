@@ -9,6 +9,9 @@ pub enum InstructionType {
           buyer          [writable]
           prem_temp      [writable]
           receive_acc    [writable]
+          receive_ata    [writable]
+          mint_pda       [writable]
+          holder_mint    [writable]
           data_pda       [writable]
           system_program []
           token_program  []
@@ -18,8 +21,10 @@ pub enum InstructionType {
         expected accounts:
           writer              [writable]
           asset_temp          [writable]
-          strike_receive_acc  [writable]
-          prem_receive_acc    [writable]
+          receive_acc         [writable]
+          receive_ata         [writable]
+          mint_pda            [writable]
+          holder_mint         [writable]
           data_pda            [writable]
           system_program      []
           token_program       []
@@ -27,13 +32,16 @@ pub enum InstructionType {
     Ask { instruction: OfferData },
     /*
         expected accounts:
-          writer              [writable]
+          writer              [writable, signer]
           asset_temp          [writable]
           strike_receive_acc  [writable]
           prem_receive_acc    [writable]
           data_pda            [writable]
           premium_temp        [writable] (owned by PDA)
-          buyer               []
+          buyer               [writable]
+          buyer_holder_ata    [writable]
+          mint_pda            [writable]
+          holder_mint         [writable]
           system_program      []
           token_program       []
     */
@@ -43,6 +51,9 @@ pub enum InstructionType {
           buyer            [writable]
           prem_temp        [writable]
           buyer_receive    [writable]
+          holder_ata       [writable]
+          mint_pda         [writable]
+          holder_mint      [writable]
           data_pda         [writable]
           prem_receive_acc []
           system_program   []
@@ -54,21 +65,25 @@ pub enum InstructionType {
           initialiser      [writable] (signer)
           token_temp       [writable] (owned by PDA)
           data_pda         [writable]
+          mint_account     [writable]
           system_program   []
           token_program    []
     */
     CancelOffer,
     /*
         expected accounts:
-          buyer          [writable] (signer)
-          strike_temp    [writable]
-          buyer_receive  [writable]
-          asset_temp     [writable] (owned by PDA)
-          data_pda       [writable]
-          writer         []
-          writer_receive []
-          system_program []
-          token_program  []
+          buyer             [writable] (signer)
+          strike_temp       [writable]
+          buyer_receive     [writable]
+          buyer_holder_ata  [writable]
+          mint_pda          [writable]
+          buyer_holder_mint [writable]
+          asset_temp        [writable] (owned by PDA)
+          data_pda          [writable]
+          writer            []
+          writer_receive    []
+          system_program    []
+          token_program     []
     */
     Execute,
     /*
@@ -80,6 +95,15 @@ pub enum InstructionType {
           token_program  []
     */
     Expire,
+    /*
+        expected accounts:
+          sender         [writable, signer]
+          holder_mint    [writable, signer] (not created)
+          mint_pda       [writable] (not created)
+          system_program []
+          token_program  []
+    */
+    CreateMint { seeds: (u8, [u8; 32]) },
 }
 
 #[derive(Debug, PartialEq)]
@@ -111,7 +135,15 @@ pub fn decode_instruction(
         4 => Ok(InstructionType::CancelOffer),
         5 => Ok(InstructionType::Execute),
         6 => Ok(InstructionType::Expire),
-        _ => return Err(ProgramError::InvalidInstructionData),
+        7 => Ok(InstructionType::CreateMint {
+            seeds: (
+                instruction_data[1],
+                instruction_data[2..]
+                    .try_into()
+                    .map_err(|_| ProgramError::InvalidInstructionData)?,
+            ),
+        }),
+        _ => Err(ProgramError::InvalidInstructionData),
     }
 }
 
@@ -130,11 +162,11 @@ fn build_offer_data(
     };
     let seed: [u8; ContractData::LEN] = instruction_data[2..ContractData::LEN + 2]
         .try_into()
-        .unwrap();
+        .map_err(|_| ProgramError::InvalidInstructionData)?;
 
     let index_seed: [u8; 41] = instruction_data[ContractData::LEN + 2..]
         .try_into()
-        .unwrap();
+        .map_err(|_| ProgramError::InvalidInstructionData)?;
     let contract_data = ContractData::deserialize(&seed);
 
     let seed = get_seed(&seed);

@@ -22,6 +22,29 @@ pub struct ContractPDA {
     pub contract_type: ContractType,
 }
 
+#[derive(Debug, PartialEq)]
+pub struct MintPDA {
+    pub holder_mint: Pubkey,
+}
+impl Sealed for MintPDA {}
+
+impl Pack for MintPDA {
+    const LEN: usize = 32;
+
+    fn unpack_from_slice(src: &[u8]) -> Result<Self, ProgramError> {
+        let src: &[u8; 32] = src
+            .try_into()
+            .map_err(|_| ProgramError::InvalidAccountData)?;
+        let holder_mint = Pubkey::new(&src[..32]);
+
+        Ok(MintPDA { holder_mint })
+    }
+
+    fn pack_into_slice(&self, dst: &mut [u8]) {
+        dst[..32].copy_from_slice(&self.holder_mint.to_bytes()[..]);
+    }
+}
+
 impl Sealed for ContractPDA {}
 
 impl IsInitialized for ContractPDA {
@@ -37,7 +60,9 @@ impl Pack for ContractPDA {
         if src.len() != ContractPDA::LEN {
             return Err(ProgramError::InvalidAccountData);
         }
-        let src: &[u8; ContractPDA::LEN] = src.try_into().unwrap();
+        let src: &[u8; ContractPDA::LEN] = src
+            .try_into()
+            .map_err(|_| ProgramError::InvalidAccountData)?;
         let (
             is_initialised,
             seed,
@@ -173,7 +198,7 @@ pub struct PartyData {
     pub party_pub: Pubkey,
     pub temp_pub: Pubkey,
     pub receive_pub: Pubkey,
-    pub prem_receive_pub: Option<Pubkey>,
+    pub receive_ata: Pubkey,
 }
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ContractType {
@@ -183,29 +208,39 @@ pub enum ContractType {
 
 impl PartyData {
     pub fn from_bytes(bytes: &[u8; 128]) -> Self {
-        let prem_bytes: [u8; 32] = bytes[96..].try_into().unwrap();
-        let prem_receive_pub = if prem_bytes == [0; 32] {
-            None
-        } else {
-            Some(Pubkey::new_from_array(prem_bytes))
-        };
         PartyData {
-            party_pub: Pubkey::new_from_array(bytes[0..32].try_into().unwrap()),
-            temp_pub: Pubkey::new_from_array(bytes[32..64].try_into().unwrap()),
-            receive_pub: Pubkey::new_from_array(bytes[64..96].try_into().unwrap()),
-            prem_receive_pub,
+            party_pub: Pubkey::new_from_array(
+                bytes[0..32]
+                    .try_into()
+                    .map_err(|_| ProgramError::InvalidAccountData)
+                    .unwrap(),
+            ),
+            temp_pub: Pubkey::new_from_array(
+                bytes[32..64]
+                    .try_into()
+                    .map_err(|_| ProgramError::InvalidAccountData)
+                    .unwrap(),
+            ),
+            receive_pub: Pubkey::new_from_array(
+                bytes[64..96]
+                    .try_into()
+                    .map_err(|_| ProgramError::InvalidAccountData)
+                    .unwrap(),
+            ),
+            receive_ata: Pubkey::new_from_array(
+                bytes[96..]
+                    .try_into()
+                    .map_err(|_| ProgramError::InvalidAccountData)
+                    .unwrap(),
+            ),
         }
     }
     pub fn to_bytes(&self) -> [u8; 128] {
-        let p = match self.prem_receive_pub {
-            Some(pb) => pb.to_bytes(),
-            None => [0; 32],
-        };
         [
             self.party_pub.to_bytes(),
             self.temp_pub.to_bytes(),
             self.receive_pub.to_bytes(),
-            p,
+            self.receive_ata.to_bytes(),
         ]
         .concat()
         .try_into()
@@ -234,7 +269,10 @@ pub struct ContractData {
 impl ContractData {
     pub const LEN: usize = 128;
     pub fn deserialize(data_array: &[u8]) -> ContractData {
-        let data_array: &[u8; Self::LEN] = data_array.try_into().unwrap();
+        let data_array: &[u8; Self::LEN] = data_array
+            .try_into()
+            .map_err(|_| ProgramError::InvalidAccountData)
+            .unwrap();
         let (
             token_type,
             token_qty,

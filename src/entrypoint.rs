@@ -21,10 +21,13 @@ pub fn process_instruction(
         InstructionType::Ask { instruction } => {
             return processor::initialise_contract(program_id, accounts, instruction)
         }
-        InstructionType::AcceptBid => return processor::accept_bid(accounts),
-        InstructionType::AcceptAsk => return processor::accept_ask(accounts),
-        InstructionType::Execute => return processor::execute_contract(accounts),
+        InstructionType::AcceptBid => return processor::accept_bid(program_id, accounts),
+        InstructionType::AcceptAsk => return processor::accept_ask(program_id, accounts),
+        InstructionType::Execute => return processor::execute_contract(program_id, accounts),
         InstructionType::CancelOffer => return processor::cancel_offer(accounts),
         InstructionType::Expire => return processor::expire_contract(accounts),
+        InstructionType::CreateMint { seeds } => {
+            return processor::create_mint(program_id, accounts, seeds)
+        }
     };
 }
