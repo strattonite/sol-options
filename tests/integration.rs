@@ -1,6 +1,6 @@
 #![cfg(feature = "test-bpf")]
 
-use call_opt::{
+use sol_options::{
     entrypoint::process_instruction,
     instruction::InitParty,
     state::{get_seed, ContractData, ContractPDA, ContractState, ContractType, PartyData},
