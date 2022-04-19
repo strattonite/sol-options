@@ -204,7 +204,7 @@ async fn init_env(contract_type: ContractType, init_mode: &InitMode) -> TestEnv 
     println!("starting test-server");
 
     let mut ctx = ProgramTest::new(
-        "call_opt",
+        "sol_options",
         program_key.pubkey(),
         processor!(process_instruction),
     )
@@ -485,19 +485,10 @@ async fn init_contract(
         expiry_date: now + expire_time,
     };
 
-    let mint_seed = get_seed(&contract_data.serialize());
+    let mint_seed = contract_data.get_seed();
     println!("creating holder mint account");
     let (mint_pda, _mint_bump) =
         Pubkey::find_program_address(&[&s1, &mint_seed], &test_env.program_key.pubkey());
-
-    // let min_rent = Rent::default().minimum_balance(82);
-    // let ix1 = system_instruction::create_account(
-    //     &test_env.ctx.payer.pubkey(),
-    //     &test_env.holder_mint.pubkey(),
-    //     min_rent,
-    //     82,
-    //     &spl_token::id(),
-    // );
 
     let accs = vec![
         AccountMeta {
@@ -602,7 +593,7 @@ async fn init_contract(
     let cd = contract_data.serialize();
     instruction_data[2..ContractData::LEN + 2].copy_from_slice(&cd);
     instruction_data[ContractData::LEN + 2..].copy_from_slice(&test_env.index_seed);
-    let seed = get_seed(&cd);
+    let seed = contract_data.get_seed();
     let index_seed = get_seed(&test_env.index_seed);
 
     let (pda, bump) =
@@ -723,7 +714,7 @@ async fn init_contract(
         bump,
         init_party,
         contract_type: *contract_type,
-        index_seed: get_seed(&test_env.index_seed),
+        index_seed,
     };
 
     assert_eq!(expected_data, pda_data, "incorrect PDA data");

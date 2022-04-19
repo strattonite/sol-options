@@ -169,7 +169,7 @@ fn build_offer_data(
         .map_err(|_| ProgramError::InvalidInstructionData)?;
     let contract_data = ContractData::deserialize(&seed);
 
-    let seed = get_seed(&seed);
+    let seed = contract_data.get_seed();
     let index_seed = get_seed(&index_seed);
 
     let (pda, bump) = Pubkey::find_program_address(&[&seed, &index_seed], pid);

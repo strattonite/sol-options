@@ -115,7 +115,7 @@ impl Pack for ContractPDA {
 
         let contract_data = ContractData::deserialize(seed);
 
-        let seed = get_seed(seed);
+        let seed = contract_data.get_seed();
 
         Ok(ContractPDA {
             is_initialised,
@@ -312,5 +312,17 @@ impl ContractData {
         v.extend_from_slice(&self.premium_type.to_bytes());
         v.extend_from_slice(&self.premium_qty.to_le_bytes());
         v.try_into().unwrap()
+    }
+
+    pub fn get_seed(&self) -> [u8; 32] {
+        let mut dst = [0; 120];
+        dst[0..32].copy_from_slice(&self.token_type.to_bytes());
+        dst[32..40].copy_from_slice(&self.token_qty.to_le_bytes());
+        dst[40..48].copy_from_slice(&self.expiry_date.to_le_bytes());
+        dst[48..80].copy_from_slice(&self.strike_type.to_bytes());
+        dst[80..88].copy_from_slice(&self.strike_qty.to_le_bytes());
+        dst[88..120].copy_from_slice(&self.premium_type.to_bytes());
+
+        get_seed(&dst)
     }
 }

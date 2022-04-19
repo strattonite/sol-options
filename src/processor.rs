@@ -1,5 +1,5 @@
 use crate::instruction;
-use crate::state::{get_seed, ContractPDA, ContractState, ContractType::*, MintPDA, PartyData};
+use crate::state::{ContractPDA, ContractState, ContractType::*, MintPDA, PartyData};
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
     clock::{Clock, SLOT_MS},
@@ -61,6 +61,7 @@ pub fn initialise_contract(
     }
     if *data_pda.key != pda {
         msg!("INCORRECT PDA ACCOUNT");
+        msg!("expected: {:#?}", pda);
         return Err(ProgramError::IncorrectProgramId);
     }
     if !initialiser.is_signer {
@@ -116,7 +117,7 @@ pub fn initialise_contract(
                 CALL => &[0],
                 PUT => &[1],
             };
-            let mint_seed = get_seed(&contract_data.serialize());
+            let mint_seed = contract_data.get_seed();
             let (mint_pdak, _bump) = Pubkey::find_program_address(&[s1, &mint_seed], program_id);
             if mint_pdak != *mint_pda.key {
                 msg!("INCORRECT MINT PDA ACCOUNT");
@@ -250,7 +251,7 @@ pub fn accept_bid(program_id: &Pubkey, accounts: &[AccountInfo]) -> Result<(), P
         CALL => &[0],
         PUT => &[1],
     };
-    let mint_seed = get_seed(&contract_pda.contract_data.serialize());
+    let mint_seed = contract_pda.contract_data.get_seed();
     let (mint_pdak, mint_bump) = Pubkey::find_program_address(&[s1, &mint_seed], program_id);
 
     msg!("unpacked accounts, asserting validity...");
@@ -486,7 +487,7 @@ pub fn accept_ask(program_id: &Pubkey, accounts: &[AccountInfo]) -> Result<(), P
         CALL => &[0],
         PUT => &[1],
     };
-    let mint_seed = get_seed(&contract_pda.contract_data.serialize());
+    let mint_seed = contract_pda.contract_data.get_seed();
     let (mint_pdak, mint_bump) = Pubkey::find_program_address(&[s1, &mint_seed], program_id);
     if mint_pdak != *mint_pda.key {
         msg!("INCORRECT MINT PDA ACCOUNT");
@@ -577,7 +578,7 @@ pub fn execute_contract(program_id: &Pubkey, accounts: &[AccountInfo]) -> Result
         CALL => &[0],
         PUT => &[1],
     };
-    let mint_seed = get_seed(&contract_pda.contract_data.serialize());
+    let mint_seed = contract_pda.contract_data.get_seed();
     let (mint_pda_k, _mint_bump) = Pubkey::find_program_address(&[s1, &mint_seed], program_id);
 
     let buyer_temp_info =
